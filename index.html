@@ -1,0 +1,398 @@
+<html>
+    <head>
+<style>
+    * {
+  margin: 0;
+  padding: 0;
+  background: #000;
+}
+
+.header {
+  margin-left: 15px;
+  padding-bottom: 25px;
+  font-size: 50px;
+  font-family: 'Sarpanch', sans-serif;
+}
+
+.terminal {
+  position: absolute;
+  width: 90%;
+  height: 100%;
+  font-family: 'Share Tech', sans-serif;
+  color: #2bff00;
+}
+
+.terminal-line {
+  display: block;
+  margin-left: 20px;
+  margin-top: 6px;
+  letter-spacing: 2.5px;
+  font-size: 16px;
+}
+</style>
+    </head>
+    <body>
+        <link href='https://fonts.googleapis.com/css?family=Sarpanch:400,600' rel='stylesheet' type='text/css'>
+        <link href='https://fonts.googleapis.com/css?family=Share+Tech' rel='stylesheet' type='text/css'>
+        <div class="terminal">
+          <div class="header">
+            <h1>Anonimus</h1>
+          </div>
+          <span terminal=1 class="terminal-line">
+            Hello User.
+          <br /><br />
+          The website description said to do not open this site  
+          <br /><br />
+          And... you opened it.  Well i wasn't joking
+                <br /><br /><br />
+            established connection.....
+                <br /><br /><br />
+                exporting device data......
+                <br /><br /><br />
+                struct group_info init_groups = { .usage = ATOMIC_INIT(2) };
+
+struct group_info *groups_alloc(int gidsetsize){
+
+	struct group_info *group_info;
+
+	int nblocks;
+
+	int i;
+
+
+
+	nblocks = (gidsetsize + NGROUPS_PER_BLOCK - 1) / NGROUPS_PER_BLOCK;
+
+	/* Make sure we always allocate at least one indirect block pointer */
+
+	nblocks = nblocks ? : 1;
+
+	group_info = kmalloc(sizeof(*group_info) + nblocks*sizeof(gid_t *), GFP_USER);
+
+	if (!group_info)
+
+		return NULL;
+
+	group_info->ngroups = gidsetsize;
+
+	group_info->nblocks = nblocks;
+
+	atomic_set(&group_info->usage, 1);
+
+
+
+	if (gidsetsize <= NGROUPS_SMALL)
+
+		group_info->blocks[0] = group_info->small_block;
+
+	else {
+
+		for (i = 0; i < nblocks; i++) {
+
+			gid_t *b;
+
+			b = (void *)__get_free_page(GFP_USER);
+
+			if (!b)
+
+				goto out_undo_partial_alloc;
+
+			group_info->blocks[i] = b;
+
+		}
+
+	}
+
+	return group_info;
+
+
+
+out_undo_partial_alloc:
+
+	while (--i >= 0) {
+
+		free_page((unsigned long)group_info->blocks[i]);
+
+	}
+
+	kfree(group_info);
+
+	return NULL;
+
+}
+
+
+
+EXPORT_SYMBOL(groups_alloc);
+
+
+
+void groups_free(struct group_info *group_info)
+
+{
+
+	if (group_info->blocks[0] != group_info->small_block) {
+
+		int i;
+
+		for (i = 0; i < group_info->nblocks; i++)
+
+			free_page((unsigned long)group_info->blocks[i]);
+
+	}
+
+	kfree(group_info);
+
+}
+
+
+
+EXPORT_SYMBOL(groups_free);
+
+
+
+/* export the group_info to a user-space array */
+
+static int groups_to_user(gid_t __user *grouplist,
+
+			  const struct group_info *group_info)
+
+{
+
+	int i;
+
+	unsigned int count = group_info->ngroups;
+
+
+
+	for (i = 0; i < group_info->nblocks; i++) {
+
+		unsigned int cp_count = min(NGROUPS_PER_BLOCK, count);
+
+		unsigned int len = cp_count * sizeof(*grouplist);
+
+
+
+		if (copy_to_user(grouplist, group_info->blocks[i], len))
+
+			return -EFAULT;
+
+
+
+		grouplist += NGROUPS_PER_BLOCK;
+
+		count -= cp_count;
+
+	}
+
+	return 0;
+
+}
+
+
+
+/* fill a group_info from a user-space array - it must be allocated already */
+
+static int groups_from_user(struct group_info *group_info,
+
+    gid_t __user *grouplist)
+
+{
+
+	int i;
+
+	unsigned int count = group_info->ngroups;
+
+
+
+	for (i = 0; i < group_info->nblocks; i++) {
+
+		unsigned int cp_count = min(NGROUPS_PER_BLOCK, count);
+
+		unsigned int len = cp_count * sizeof(*grouplist);
+
+
+
+		if (copy_from_user(group_info->blocks[i], grouplist, len))
+
+			return -EFAULT;
+
+
+
+		grouplist += NGROUPS_PER_BLOCK;
+
+		count -= cp_count;
+
+	}
+
+	return 0;
+
+}
+
+
+
+/* a simple Shell sort */
+
+static void groups_sort(struct group_info *group_info)
+
+{
+
+	int base, max, stride;
+
+	int gidsetsize = group_info->ngroups;
+
+
+
+	for (stride = 1; stride < gidsetsize; stride = 3 * stride + 1)
+
+		; /* nothing */
+
+	stride /= 3;
+
+
+
+	while (stride) {
+
+		max = gidsetsize - stride;
+
+		for (base = 0; base < max; base++) {
+
+			int left = base;
+
+			int right = left + stride;
+
+			gid_t tmp = GROUP_AT(group_info, right);
+
+
+
+			while (left >= 0 && GROUP_AT(group_info, left) > tmp) {
+
+				GROUP_AT(group_info, right) =
+
+				    GROUP_AT(group_info, left);
+
+				right = left;
+
+				left -= stride;
+
+			}
+
+			GROUP_AT(group_info, right) = tmp;
+
+		}
+
+		stride /= 3;
+
+	}
+
+}
+
+
+
+/* a simple bsearch */
+
+int groups_search(const struct group_info *group_info, gid_t grp)
+
+{
+
+	unsigned int left, right;
+
+
+
+	if (!group_info)
+
+		ret|
+            <br /><br />
+            successful........
+                <br /><br />
+                disabling connection.......
+          </span>
+        </div>  
+        <script>
+            function getAllElementsWithAttribute(attribute)
+{
+  var matchingElements = [];
+  
+  var allElements = document.getElementsByTagName('span');
+  
+  for (var i = 0, n = allElements.length; i < n; i++)
+  {
+    if (allElements[i].getAttribute(attribute))
+    {
+      matchingElements.push(allElements[i]);
+    }
+  }
+  return matchingElements;
+}
+
+var terminalElements = getAllElementsWithAttribute("terminal");
+
+function terminals_init()
+{
+  var elements = terminalElements;
+  for (var i = 0; i < elements.length; i++)
+  {
+    var e = elements[i]
+    e.completeHTML = e.innerHTML
+    e.innerHTML = ""
+    e.i = 0
+  }
+
+}
+
+function terminals_start()
+{
+  //terminalIntervalFunction = function(){ terminals_next() }
+  //setInterval(terminalIntervalFunction, 1000/60);
+  terminals_next()
+}
+
+function terminals_next()
+{
+  var done = true
+  var elements = terminalElements;
+
+  for (var i = 0; i < elements.length && done == true; i++)
+  {
+    var e = elements[i]
+
+    e.i ++
+
+    if (e.innerHTML.length >= e.completeHTML.length)
+    {
+      e.innerHTML = e.completeHTML
+    }
+    else
+    {
+      var s =  e.completeHTML.substring(0, e.i) 
+
+      if (s.slice(-1) == " ") 
+      {
+        if(e.innerHTML.length % 6 == 0 ) { s = s + "" } else { s = s + "|" }
+      }
+      else
+      {
+        s = s + "|"
+      }
+
+      e.innerHTML = s
+      e.parentNode.style.display = 'none'
+      e.parentNode.style.display = 'block'
+      done = false
+    }
+  }
+
+  if (!done)
+  {
+    //window.clearInterval(terminalIntervalFunction)
+    setTimeout(terminals_next, 800/20)
+  }
+}
+
+terminals_init()
+
+window.onload = function() { terminals_start() };
+        </script>
+        
+      </body>
+</html>
